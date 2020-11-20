@@ -35,23 +35,24 @@ fn search_dir(target_path: &str) -> u8 {
 
 fn simple_scan_file(filename: &str) -> u8 {
     let mut f = File::open(filename).expect("file not found");
-    let mut contents = String::new();
-    f.read_to_string(&mut contents)
-        .expect("something went wrong reading the file");
-    println!("With text\n{}", contents);
+    let mut buf = vec![];
+    f.read_to_end(&mut buf).expect("Cannot read file");
+    let contents = String::from_utf8_lossy(&buf);
+    //    f.read_to_string(&mut contents)
+    //        println!("With text\n{}", contents);
     let add_detected_count = find_keywords(&contents);
     add_detected_count
 }
 
 fn find_keywords(content: &str) -> u8 {
     let mut detected_check: u8 = 0;
-    let re = Regex::new(r"wget http://.*; chmod .*;").unwrap();
-    let cap = re.captures(content).unwrap();
-    if !cap.get(0).unwrap().as_str().is_empty() {
+    let re = Regex::new(r"wget http://.*; chmod .*; \./.*;").unwrap();
+    let cap = re.captures(content);
+    if !cap.is_none() {
         detected_check = 1;
-    }
-    for caps in re.captures_iter(content) {
-        println!("{}", &caps[0]);
+        for caps in re.captures_iter(content) {
+            println!("{}", &caps[0]);
+        }
     }
     detected_check
 }
