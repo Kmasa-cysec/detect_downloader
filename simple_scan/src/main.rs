@@ -32,10 +32,10 @@ fn search_dir(target_path: &str, mut scanfile_count: u8) -> u8 {
     detected_count_temp
 }
 
-fn simple_scan_file(filename: &str) -> u8 {
-    let mut f = File::open(filename).expect("file not found");
+fn simple_scan_file(filepath: &str) -> u8 {
+    let mut fr = File::open(filepath).expect("file not found");
     let mut buf = vec![];
-    f.read_to_end(&mut buf).expect("Cannot read file");
+    fr.read_to_end(&mut buf).expect("Cannot read file");
     let contents = String::from_utf8_lossy(&buf);
     //    f.read_to_string(&mut contents)
     //        println!("With text\n{}", contents);
@@ -45,7 +45,7 @@ fn simple_scan_file(filename: &str) -> u8 {
 
 fn find_keywords(content: &str) -> u8 {
     let mut detected_check: u8 = 0;
-    let re = Regex::new(r"wget http://.*; chmod .*; \./.*;").unwrap();
+    let re = Regex::new(r"wget http://.*;[\s\S]*chmod .*;[\s\S]*\./.*;").unwrap();
     let cap = re.captures(content);
     if !cap.is_none() {
         detected_check = 1;
