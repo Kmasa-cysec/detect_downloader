@@ -6,7 +6,8 @@ use std::io::prelude::*;
 extern crate regex;
 use regex::Regex;
 
-static mut Scan_Count: u64 = 0;
+static mut SCAN_COUNT: u64 = 0;
+static mut CHMOD_COUNT: u64 = 0;
 // "~/dataset/rm/03ec5e176ea404f1193608a4298a5ebdaa2e275461836b6762d25cf19b252446")
 /*
 fn scanfile_count(add_scanfile_num: u64, caller_check: u8) -> u64 {
@@ -33,8 +34,8 @@ fn search_dir(target_path: &str, mut detected_count: u64) -> u64 {
             println!("Scan {}", path_str);
             return_detected_count = simple_scan_file(path_str);
             unsafe {
-                Scan_Count = Scan_Count + 1;
-                println!("Now Scaning {} files", Scan_Count);
+                SCAN_COUNT = SCAN_COUNT + 1;
+                println!("Now Scaning {} files", SCAN_COUNT);
             }
         }
         detected_count = detected_count + return_detected_count;
@@ -59,20 +60,27 @@ fn simple_scan_file(filepath: &str) -> u64 {
 
 fn find_keywords(content: &str) -> u64 {
     let mut detected_check: u64 = 0;
-    //    let re = Regex::new(r"[wget|curl]\s+(?P<wget_file>http.*)\s*[;|\&\&|\n][\s\S]*chmod\s+(?P<chmod_file>.*)\s*[;|\&\&|\n][\s\S]*[\./|sh[\s\S]*](?P<exec_file>.*)\s*[;|\&\&|\n]")
-    //            .unwrap();
-    //    let re = Regex::new(r"[wget|curl]\s+(?P<wget_file>http(s)?:.*)\s*[;|\&\&|\n]").unwrap();
     let re_wget =
-        Regex::new(r"[wget|curl]\s+[\s\-\w=,]*(?P<wget_file>http://.*)\s*[;|\&\&|\n]").unwrap();
-    let cap_wget = re_wget.captures(content);
-    if !cap_wget.is_none() {
-        let re_chmod = Regex::new(r"chmod\s+[\s\-\w=,]*(?P<chmod_file>.*)\s*[;|\&\&|\n]").unwrap();
-        let cap_chmod = re_chmod.captures(content);
-        //        println!("passsssss");
-        if !cap_chmod.is_none() {
-            let re_exec = Regex::new(r"[\./|sh\s+](?P<exec_file>.*)\s*[;|\&\&|\n]").unwrap();
-            let cap_exec = re_exec.captures(content);
-            if !cap_exec.is_none() {
+        Regex::new(r"(wget|curl)\s+.*(?P<wget_file>https?://[\w/:%#\$&\?\(\)~\.=\+\-]+)\s*((;|\&\&)\s*chmod|\n)").unwrap();
+    if let Some(cap_wget) = re_wget.captures(content) {
+        let wget_str = &cap_wget["wget_file"];
+        println!("WGET(debug)::{}", wget_str);
+
+        let re_chmod =
+            Regex::new(r"chmod\s+[+\w=]+\s*(?P<chmod_file>[\w/:%#\$&\?\(\)~\.=\+\-*]+)\s*((;|\&\&)\s*(\./|sh\s+)|\n)")
+                .unwrap();
+        if let Some(cap_chmod) = re_chmod.captures(content) {
+            let chmod_str = &cap_chmod["chmod_file"];
+            println!("CHMOD(debug)::{}", chmod_str);
+            unsafe {
+                CHMOD_COUNT = CHMOD_COUNT + 1;
+            }
+            let re_exec =
+                Regex::new(r"(\./|sh\s+)(?P<exec_file>[\w/:%#\$&\?\(\)~\.=\+\-*]+)\s*(;|\&\&|\n)")
+                    .unwrap();
+            if let Some(cap_exec) = re_exec.captures(content) {
+                let exec_str = &cap_exec["exec_file"];
+                println!("EXEC(debug)::{}", exec_str);
                 detected_check = 1;
             }
         }
@@ -85,12 +93,17 @@ fn main() {
     let target_path = &args[1];
     let init_detected_count = 0;
     let scan_count: u64;
+    let chmod_count: u64;
     //let filename = "~/dataset/rm/03ec5e176ea404f1193608a4298a5ebdaa2e275461836b6762d25cf19b252446";
     println!("In file/directory {}", target_path);
 
     let detected_count: u64;
     if check_dir(target_path) {
         detected_count = search_dir(target_path, init_detected_count);
+        unsafe {
+            scan_count = SCAN_COUNT;
+        }
+        println!("\n-----> All scan {} files", scan_count);
     } else {
         println!("Scan {}", target_path);
         detected_count = simple_scan_file(target_path);
@@ -98,9 +111,9 @@ fn main() {
         println!("\n-----> Scan {} file", allscanfiles_count);
     }
     unsafe {
-        scan_count = Scan_Count;
+        chmod_count = CHMOD_COUNT;
     }
-    println!("\n-----> All scan {} files", scan_count);
+    println!("\n-----> Chmod Count(debug) {} files", chmod_count);
     println!("-----> Detected {} files", detected_count);
     //    assert!(contents.contains("wget"));
     //    matched(&contents);
