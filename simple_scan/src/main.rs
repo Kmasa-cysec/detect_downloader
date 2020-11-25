@@ -64,35 +64,40 @@ fn find_keywords(content: &str) -> u64 {
         Regex::new(r"(wget|curl)\s+.*(?P<wget_file>https?://[\w/:%#\$&\?\(\)~\.=\+\-]+)\s*((;|\&\&)\s*.*(;|\&\&)*\s*chmod|\n)").unwrap();
     if let Some(_caps_wget) = re_wget.captures(content) {
         let mut loop_count = 0;
-        for cap_wget in re_wget.captures_iter(content) {
+        'outside: for cap_wget in re_wget.captures_iter(content) {
             // println!("{}", &cap_wget["wget_file"]);
             let wget_str = &cap_wget["wget_file"];
             println!("WGET(debug)::{}", wget_str);
             let re_chmod =
             Regex::new(r"chmod\s+[+\w=]+\s*(?P<chmod_file>[\w/:%#\$&\?\(\)~=\+\-*]+)[\.\w-]*\s*((;|\&\&)\s*(\./|sh\s+)|\n)").unwrap();
 
-            if let Some(cap_chmod) = re_chmod.captures(content) {
-                let chmod_str = &cap_chmod["chmod_file"];
-                println!("CHMOD(debug)::{}", chmod_str);
-                if wget_str.contains(chmod_str) || chmod_str == "*" {
-                    if loop_count == 0 {
-                        unsafe {
-                            CHMOD_COUNT = CHMOD_COUNT + 1;
+            if let Some(_caps_chmod) = re_chmod.captures(content) {
+                for cap_chmod in re_chmod.captures_iter(content) {
+                    let chmod_str = &cap_chmod["chmod_file"];
+                    println!("CHMOD(debug)::{}", chmod_str);
+                    if wget_str.contains(chmod_str) || chmod_str == "*" {
+                        if loop_count == 0 {
+                            unsafe {
+                                CHMOD_COUNT = CHMOD_COUNT + 1;
+                            }
                         }
-                    }
-                    println!("chmod_detected(debug)!!!!!!!!");
-                }
-                let re_exec = Regex::new(
-                    r"([^\.]\./|sh\s+)(?P<exec_file>[\w/:%#\$&\?\(\)~\.=\+\-*]+)\s*(;|\&\&|\n)",
-                )
-                .unwrap();
-                if let Some(cap_exec) = re_exec.captures(content) {
-                    let exec_str = &cap_exec["exec_file"];
-                    println!("EXEC(debug)::{}", exec_str);
-                    if wget_str.contains(exec_str) || exec_str == "*" {
-                        detected_check = 1;
-                        println!("exec_detected(debug)!!!!!!!!!!!\n");
-                        break;
+                        println!("chmod_detected(debug)!!!!!!!!");
+
+                        let re_exec = Regex::new(
+                        r"([^\.]\./|sh\s+)(?P<exec_file>[\w/:%#\$&\?\(\)~\.=\+\-*]+)\s*.*(;|\&\&|\n)",
+                    )
+                    .unwrap();
+                        if let Some(_cap_exec) = re_exec.captures(content) {
+                            for cap_exec in re_exec.captures_iter(content) {
+                                let exec_str = &cap_exec["exec_file"];
+                                println!("EXEC(debug)::{}", exec_str);
+                                if wget_str.contains(exec_str) || exec_str == "*" {
+                                    detected_check = 1;
+                                    println!("exec_detected(debug)!!!!!!!!!!!\n");
+                                    break 'outside;
+                                }
+                            }
+                        }
                     }
                 }
             }
