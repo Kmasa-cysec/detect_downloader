@@ -3,21 +3,13 @@ use std::fs;
 use std::fs::metadata;
 use std::fs::File;
 use std::io::prelude::*;
+use std::panic;
 extern crate regex;
 use regex::Regex;
 
 static mut SCAN_COUNT: u64 = 0;
 static mut CHMOD_COUNT: u64 = 0;
 // "~/dataset/rm/03ec5e176ea404f1193608a4298a5ebdaa2e275461836b6762d25cf19b252446")
-/*
-fn scanfile_count(add_scanfile_num: u64, caller_check: u8) -> u64 {
-    let mut scanfile_num: u64 = add_scanfile_num;
-    if caller_check == 1 {
-        scanfile_num = scanfile_num + 1;
-    }
-    scanfile_num
-}
-*/
 fn check_dir(target_path: &str) -> bool {
     let check = metadata(target_path).unwrap();
     check.is_dir()
@@ -49,8 +41,6 @@ fn simple_scan_file(filepath: &str) -> u64 {
     let mut buf = vec![];
     fr.read_to_end(&mut buf).expect("Cannot read file");
     let contents = String::from_utf8_lossy(&buf);
-    //    f.read_to_string(&mut contents)
-    //        println!("With text\n{}", contents);
     let add_detected_count: u64 = find_keywords(&contents);
     if add_detected_count == 0 {
         println!("Undetected File: {}", filepath);
@@ -59,60 +49,46 @@ fn simple_scan_file(filepath: &str) -> u64 {
 }
 
 fn find_keywords(content: &str) -> u64 {
-    let mut detected_check: u64 = 0;
+    let mut detected_check = 0;
+    let mut dc_ref = panic::AssertUnwindSafe(&mut detected_check);
     let mut check_chmod = 0;
-    let test = r"(wget|curl)\s+(\$[\w\{\}]*)*\s*[+\w=\-_]*\s*(?P<wget_file>(https?://)?[\w/:%#&\?\{\}\(\)~\.=_\+\-]+)\s*(.*\s*(;|\&\&)\s*.*(;|\&\&)*\s*chmod|\n)";
-    let re_wget = Regex::new(test.trim()).unwrap();
+    let _p = panic::catch_unwind(move || {
+        let match_wget = r"(wget|curl)\s+(\$[\w\{\}]*)*\s*[+\w=\-_]*\s*(?P<wget_file>(https?://)?[\w/:%#&\?\{\}\(\)~\.=_\+\-]+)\s*(.*\s*(;|\&\&)\s*.*(;|\&\&)*\s*chmod|\n)";
+        let re_wget = Regex::new(match_wget.trim()).unwrap();
+        if let Some(_caps_wget) = re_wget.captures(content) {
+            'outside: for cap_wget in re_wget.captures_iter(content) {
+                let mut wget_str = &cap_wget["wget_file"];
+                let wget_str_parse: Vec<&str> = wget_str.split("/").collect();
+                wget_str = wget_str_parse[wget_str_parse.len() - 1];
+                println!("WGET(debug)::{}", wget_str);
+                let match_chmod = format!(r"chmod\s+([s\w=\-]+\s*)*\s*.*({}|\*)", wget_str);
+                let re_chmod = Regex::new(match_chmod.trim()).unwrap();
 
-    /*
-        let re_wget =
-            Regex::new(r"(wget|curl)\s+(\$[\w\{\}]*)*\s*[+\w=\-_]*\s*(?P<wget_file>(https?://)?[\w/:%#&\?\{\}\(\)~\.=_\+\-]+)\s*(.*\s*(;|\&\&)\s*.*(;|\&\&)*\s*chmod|\n)").unwrap();
-    */
-    if let Some(_caps_wget) = re_wget.captures(content) {
-        'outside: for cap_wget in re_wget.captures_iter(content) {
-            // println!("{}", &cap_wget["wget_file"]);
-            let wget_str = &cap_wget["wget_file"];
-            println!("WGET(debug)::{}", wget_str);
-            let re_chmod =
-            Regex::new(r"chmod\s+[+\w=\-]+\s*(?P<chmod_file>[\w/:%#\$&\?\(\)~=\+\-*]+)[\.\w-]*\s*((;|\&\&)\s*(\./|sh\s+)*|\n)").unwrap();
-
-            if let Some(_caps_chmod) = re_chmod.captures(content) {
-                for cap_chmod in re_chmod.captures_iter(content) {
-                    let mut chmod_str = &cap_chmod["chmod_file"];
-                    let chmod_str_parse: Vec<&str> = chmod_str.split("/").collect();
-                    chmod_str = chmod_str_parse[chmod_str_parse.len() - 1];
-                    println!("CHMOD(debug)::{}", chmod_str);
-                    if wget_str.contains(chmod_str) || chmod_str.contains("*") {
-                        if check_chmod == 0 {
-                            unsafe {
-                                CHMOD_COUNT = CHMOD_COUNT + 1;
-                                check_chmod = check_chmod + 1;
-                            }
+                if let Some(_caps_chmod) = re_chmod.captures(content) {
+                    if check_chmod == 0 {
+                        unsafe {
+                            CHMOD_COUNT = CHMOD_COUNT + 1;
+                            check_chmod = check_chmod + 1;
                         }
-                        println!("chmod_detected(debug)!!!!!!!!");
-
-                        let re_exec = Regex::new(
-                        r"([^\.]\./|sh\s+)(?P<exec_file>([\w/:%#\$&\?\(\)~\.=\+\-*]+)|((;|\&\&)\s*/[\w/\-_]*))\s*.*(;|\&\&|\n)",
-                    )
-                    .unwrap();
-                        if let Some(_cap_exec) = re_exec.captures(content) {
-                            for cap_exec in re_exec.captures_iter(content) {
-                                let mut exec_str = &cap_exec["exec_file"];
-                                let exec_str_parse: Vec<&str> = exec_str.split("/").collect();
-                                exec_str = exec_str_parse[exec_str_parse.len() - 1];
-                                println!("EXEC(debug)::{}", exec_str);
-                                if wget_str.contains(exec_str) || exec_str.contains("*") {
-                                    detected_check = 1;
-                                    println!("exec_detected(debug)!!!!!!!!!!!\n");
-                                    break 'outside;
-                                }
-                            }
-                        }
+                    }
+                    let match_exec = format!(
+                        r";*(./|sh\s+)(\s*.*)({}|\*)\s*([\w/-=\._]*\s)*(;|\n)",
+                        wget_str
+                    );
+                    let re_exec = Regex::new(match_exec.trim()).unwrap();
+                    if let Some(cap_exec) = re_exec.captures(content) {
+                        println!(
+                            "EXEC(debug)::{}",
+                            cap_exec.get(0).map_or("", |m| m.as_str())
+                        );
+                        **dc_ref = 1;
+                        println!("exec_detected(debug)!!!!!!!!!!!\n");
+                        break 'outside;
                     }
                 }
             }
         }
-    }
+    });
     detected_check
 }
 
