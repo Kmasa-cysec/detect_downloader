@@ -53,15 +53,26 @@ fn find_keywords(content: &str) -> u64 {
     let mut dc_ref = panic::AssertUnwindSafe(&mut detected_check);
     let mut check_chmod = 0;
     let _p = panic::catch_unwind(move || {
-        let match_wget = r"(wget|curl)\s+(\$[\w\{\}]*)*\s*[+\w=\-_]*\s*(?P<wget_file>(https?://)?[\w/:%#&\?\{\}\(\)~\.=_\+\-]+)\s*(.*\s*(;|\&\&)\s*.*(;|\&\&)*\s*chmod|\n)";
+        let match_wget = r"(wget|curl)\s+(\$[\w\{\}]*)*\s*[+\w=\-_]*\s*(?P<wget_file>(https?://)?[\w/:%#&\$\?\{\}\(\)~\.=_\+\-]+)\s*(.*\s*(;|\&\&)\s*.*(;|\&\&)*\s*chmod|[.\s]*\|\||\n)";
         let re_wget = Regex::new(match_wget.trim()).unwrap();
         if let Some(_caps_wget) = re_wget.captures(content) {
             'outside: for cap_wget in re_wget.captures_iter(content) {
-                let mut wget_str = &cap_wget["wget_file"];
-                let wget_str_parse: Vec<&str> = wget_str.split("/").collect();
-                wget_str = wget_str_parse[wget_str_parse.len() - 1];
-                println!("WGET(debug)::{}", wget_str);
-                let match_chmod = format!(r"chmod\s+([s\w=\-]+\s*)*\s*.*({}|\*)", wget_str);
+                let mut wget_str_tmp = &cap_wget["wget_file"];
+                let wget_str_parse: Vec<&str> = wget_str_tmp.split("/").collect();
+                wget_str_tmp = wget_str_parse[wget_str_parse.len() - 1];
+                let wget_str;
+                println!("WGET(debug)::{}", wget_str_tmp);
+                if wget_str_tmp.starts_with(r"$") {
+                    //wget_str = format!(r"\{}", &wget_str);
+                    wget_str = wget_str_tmp.replace(r"$", r"\$");
+                } else {
+                    wget_str = wget_str_tmp.to_string();
+                }
+                let match_chmod = format!(
+                    //r"chmod\s+([\w=\-]+\s*)*\s*.*({}|\*)\s*(;|\&\&|\|\||\n)",
+                    r"chmod\s+[\s\S]*\s*({}[\.\w\$\-_]*|\*)\s*(;|\&\&|\|\||\n)",
+                    wget_str
+                );
                 let re_chmod = Regex::new(match_chmod.trim()).unwrap();
 
                 if let Some(_caps_chmod) = re_chmod.captures(content) {
@@ -72,7 +83,7 @@ fn find_keywords(content: &str) -> u64 {
                         }
                     }
                     let match_exec = format!(
-                        r";*(./|sh\s+)(\s*.*)({}|\*)\s*([\w/-=\._]*\s)*(;|\n)",
+                        r"(\&\&|;|\n|\|\|)\s*(\./|[^\.]/[^\n;\&\s]*|sh\s+)\s?({}|\*^\+)[^\n;\*]*(;|\n)",
                         wget_str
                     );
                     let re_exec = Regex::new(match_exec.trim()).unwrap();
