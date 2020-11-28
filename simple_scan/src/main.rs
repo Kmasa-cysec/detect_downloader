@@ -9,7 +9,6 @@ use regex::Regex;
 
 static mut SCAN_COUNT: i32 = 0;
 static mut CHMOD_COUNT: i32 = 0;
-// "~/dataset/rm/03ec5e176ea404f1193608a4298a5ebdaa2e275461836b6762d25cf19b252446")
 fn check_dir(target_path: &str) -> bool {
     let check = metadata(target_path).unwrap();
     check.is_dir()
@@ -23,16 +22,15 @@ fn search_dir(target_path: &str, mut detected_count: i32) -> i32 {
         if check_dir(path_str) {
             detected_count = search_dir(path_str, detected_count);
         } else {
-            println!("Scan {}", path_str);
-            return_detected_count = simple_scan_file(path_str);
             unsafe {
                 SCAN_COUNT = SCAN_COUNT + 1;
-                println!("Now Scaning {} files", SCAN_COUNT);
+                println!("\n<Now Scaning {} files>", SCAN_COUNT);
             }
+            println!("Scan {}", path_str);
+            return_detected_count = simple_scan_file(path_str);
         }
         detected_count = detected_count + return_detected_count;
     }
-    //    println!("\n-----> Detected {} files", detected_count);
     detected_count
 }
 
@@ -58,12 +56,16 @@ fn find_keywords(content: &str) -> i32 {
         if let Some(_caps_wget) = re_wget.captures(content) {
             'outside: for cap_wget in re_wget.captures_iter(content) {
                 let mut wget_str_tmp = &cap_wget["wget_file"];
-                let wget_str_parse: Vec<&str> = wget_str_tmp.split("/").collect();
+                let wget_str_parse: Vec<&str>;
+                if wget_str_tmp.contains(char::is_whitespace) {
+                    wget_str_parse = wget_str_tmp.split_whitespace().collect();
+                } else {
+                    wget_str_parse = wget_str_tmp.split("/").collect();
+                }
                 wget_str_tmp = wget_str_parse[wget_str_parse.len() - 1];
                 let wget_str;
                 println!("WGET(debug)::{}", wget_str_tmp);
                 if wget_str_tmp.starts_with(r"$") {
-                    //wget_str = format!(r"\{}", &wget_str);
                     wget_str = wget_str_tmp.replace(r"$", r"\$");
                 } else {
                     wget_str = wget_str_tmp.to_string();
@@ -88,7 +90,7 @@ fn find_keywords(content: &str) -> i32 {
                     }
                     let match_exec = format!(
                         //r"(\&\&|;|\n|\|\|)\s*(\./|[^\.]/[^\n;\&\s]*|sh\s+)\s*({}|\*^\+)\s*[^\n;\*]*(>+|;|\n)",
-                        r"(\&\&|;|\n|\|\|)\s*(\.*/|sh\s+)\s*[\w\.\$\-_=/\&]*({}|\*^\+)\s*[^\n;\*]*(>+|;|\n)",
+                        r"(\&\&|;|\n|\|\|)\s*(\.*/|sh\s+|perl\s+)\s*[\w\.\$\-_=/\&]*({}|\*^\+)\s*[^\n;\*]*(>+|;|\n)",
                         wget_str
                     );
                     let re_exec = Regex::new(match_exec.trim()).unwrap();
@@ -114,9 +116,7 @@ fn main() {
     let init_detected_count = 0;
     let mut scan_count: i32 = 0;
     let chmod_count: i32;
-    //let filename = "~/dataset/rm/03ec5e176ea404f1193608a4298a5ebdaa2e275461836b6762d25cf19b252446";
     println!("In file/directory {}", target_path);
-
     let detected_count: i32;
     if check_dir(target_path) {
         detected_count = search_dir(target_path, init_detected_count);
@@ -139,6 +139,4 @@ fn main() {
         "\n-----> TP Rate: {:.3}% ",
         (detected_count as f32 / scan_count as f32) * 100.0
     );
-    //    assert!(contents.contains("wget"));
-    //    matched(&contents);
 }
